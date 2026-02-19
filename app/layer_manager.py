@@ -126,8 +126,9 @@ class LayerManagerWidget(QWidget):
 
     def _rebuild_checkboxes(self) -> None:
         """Rebuild all layer checkboxes with color swatches."""
-        # Clear existing
+        # Clear existing — remove from layout first, then delete
         for cb in self._checkboxes.values():
+            self._scroll_layout.removeWidget(cb)
             cb.deleteLater()
         self._checkboxes.clear()
 

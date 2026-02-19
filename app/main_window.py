@@ -419,6 +419,7 @@ class MainWindow(QMainWindow):
 
         self._set_loading(False)
         self._update_status()
+        self.setWindowTitle(f"{self._document.file_path.name} — {APP_NAME}")
 
         # Fit after the scene is populated (delayed so geometry settles)
         QTimer.singleShot(100, self._viewer.fit_drawing)

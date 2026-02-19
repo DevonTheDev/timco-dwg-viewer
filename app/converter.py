@@ -84,6 +84,9 @@ def convert_dwg_to_dxf(dwg_path: Path) -> Path:
 
     except ConversionError:
         raise
+    finally:
+        # Always clean up the input temp dir (output dir is kept — the DXF lives there)
+        shutil.rmtree(input_dir, ignore_errors=True)
     except subprocess.TimeoutExpired:
         raise ConversionError(
             f"ODA conversion timed out after {ODA_TIMEOUT_SECONDS} seconds."
