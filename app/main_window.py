@@ -113,9 +113,11 @@ class MainWindow(QMainWindow):
 
         self._document: DrawingDocument | None = None
         self._dxf_path: Path | None = None  # path to the loaded DXF (may be temp)
+        self._dxf_temp_dir: Path | None = None  # temp dir to clean up on next load
         self._original_path: Path | None = None  # original file the user opened
         self._conversion_thread = None
         self._conversion_worker = None
+        self._loading = False  # guard against re-entrant loads
         self._pending_update = None  # UpdateInfo when an update is available
         self._update_thread = None
 
@@ -366,7 +368,9 @@ class MainWindow(QMainWindow):
 
     def _open_path(self, file_path: Path) -> None:
         """Open a DWG or DXF file by path (used by dialog, recent menu, and drag-drop)."""
-        # Block opening another file while a conversion is in progress
+        # Block re-entrant opens during conversion or loading
+        if self._loading:
+            return
         if self._conversion_thread and self._conversion_thread.isRunning():
             return
 
@@ -404,8 +408,15 @@ class MainWindow(QMainWindow):
 
     def _load_dxf(self, path: Path, display_path: Path | None = None) -> None:
         """Load a DXF file into the viewer."""
+        import shutil
+
+        self._loading = True
         self._set_loading(True, f"Loading {path.name}...")
         QApplication.processEvents()
+
+        # Clean up the temp directory from a previous DWG conversion
+        old_temp = self._dxf_temp_dir
+        self._dxf_temp_dir = None
 
         try:
             self._document = DrawingDocument.from_dxf(path)
@@ -414,14 +425,24 @@ class MainWindow(QMainWindow):
             self._original_path = display_path or path
         except Exception as e:
             self._set_loading(False)
+            self._loading = False
             QMessageBox.critical(self, "Load Error", f"Failed to load DXF:\n{e}")
             return
+
+        # Track temp dir if the DXF lives in one (from DWG conversion)
+        if path.parent.name.startswith("timco_out_"):
+            self._dxf_temp_dir = path.parent
+
+        # Safe to clean up the old temp dir now that the new doc is loaded
+        if old_temp and old_temp.is_dir():
+            shutil.rmtree(old_temp, ignore_errors=True)
 
         self._layer_manager.set_layers(self._document.layers)
         self._viewer.set_document(self._document.doc)
         self._act_export.setEnabled(True)
 
         self._set_loading(False)
+        self._loading = False
         self._update_status()
         self.setWindowTitle(f"{self._document.file_path.name} — {APP_NAME}")
 
@@ -512,6 +533,10 @@ class MainWindow(QMainWindow):
 
     def _manual_update_check(self) -> None:
         """User-triggered update check (Help menu)."""
+        # Don't stack up multiple checks — ignore if one is already running
+        if hasattr(self, "_manual_update_thread") and self._manual_update_thread and self._manual_update_thread.isRunning():
+            return
+
         self._status_bar.showMessage("Checking for updates...")
 
         thread = QThread()
@@ -519,7 +544,7 @@ class MainWindow(QMainWindow):
         worker.moveToThread(thread)
         thread.started.connect(worker.run)
 
-        # Need to keep references alive
+        # Keep references alive
         self._manual_update_thread = thread
         self._manual_update_worker = worker
 

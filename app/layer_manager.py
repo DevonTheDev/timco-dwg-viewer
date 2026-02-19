@@ -174,26 +174,29 @@ class LayerManagerWidget(QWidget):
         if cb and cb.isChecked():
             cb.setChecked(False)  # triggers stateChanged → _emit_visibility
 
-    # Selection helpers
+    # Selection helpers — only affect checkboxes visible in the current filter
     def _select_all(self) -> None:
         for cb in self._checkboxes.values():
-            cb.blockSignals(True)
-            cb.setChecked(True)
-            cb.blockSignals(False)
+            if cb.isVisible():
+                cb.blockSignals(True)
+                cb.setChecked(True)
+                cb.blockSignals(False)
         self._emit_visibility()
 
     def _select_none(self) -> None:
         for cb in self._checkboxes.values():
-            cb.blockSignals(True)
-            cb.setChecked(False)
-            cb.blockSignals(False)
+            if cb.isVisible():
+                cb.blockSignals(True)
+                cb.setChecked(False)
+                cb.blockSignals(False)
         self._emit_visibility()
 
     def _select_invert(self) -> None:
         for cb in self._checkboxes.values():
-            cb.blockSignals(True)
-            cb.setChecked(not cb.isChecked())
-            cb.blockSignals(False)
+            if cb.isVisible():
+                cb.blockSignals(True)
+                cb.setChecked(not cb.isChecked())
+                cb.blockSignals(False)
         self._emit_visibility()
 
     # Presets
