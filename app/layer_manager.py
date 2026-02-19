@@ -219,10 +219,14 @@ class LayerManagerWidget(QWidget):
             visible_layers=self._get_visible_layers(),
         )
         path = PRESETS_DIR / f"{name}.json"
-        path.write_text(
-            json.dumps({"name": preset.name, "visible_layers": sorted(preset.visible_layers)}, indent=2),
-            encoding="utf-8",
-        )
+        try:
+            path.write_text(
+                json.dumps({"name": preset.name, "visible_layers": sorted(preset.visible_layers)}, indent=2),
+                encoding="utf-8",
+            )
+        except OSError as e:
+            QMessageBox.warning(self, "Save Error", f"Could not save preset:\n{e}")
+            return
         self._refresh_preset_list()
         # Select the newly saved preset
         idx = self._preset_combo.findText(name)
@@ -236,7 +240,11 @@ class LayerManagerWidget(QWidget):
         path = Path(path_str)
         if not path.is_file():
             return
-        data = json.loads(path.read_text(encoding="utf-8"))
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError) as e:
+            QMessageBox.warning(self, "Load Error", f"Could not load preset:\n{e}")
+            return
         visible = set(data.get("visible_layers", []))
 
         for name, cb in self._checkboxes.items():

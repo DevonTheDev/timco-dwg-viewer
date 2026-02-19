@@ -230,6 +230,13 @@ class MainWindow(QMainWindow):
         self._recent_menu.clear()
         files = get_recent_files()
 
+        # Prune paths that no longer exist
+        valid = [f for f in files if Path(f).is_file()]
+        if len(valid) != len(files):
+            from app.utils.settings import get_settings
+            get_settings().setValue("recent_files", valid)
+            files = valid
+
         if not files:
             no_recent = self._recent_menu.addAction("(no recent files)")
             no_recent.setEnabled(False)
@@ -550,6 +557,7 @@ class MainWindow(QMainWindow):
 
         def on_done(info):
             thread.quit()
+            thread.wait()
             if info is None:
                 QMessageBox.information(
                     self, "Up to Date",
