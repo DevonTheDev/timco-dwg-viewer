@@ -33,7 +33,7 @@ from app.config import (
     TIMCO_GREEN,
     TIMCO_YELLOW,
 )
-from app.converter import ConversionError, start_conversion
+from app.converter import start_conversion
 from app.exporter import export_all_layers, export_filtered_dxf, suggest_output_path
 from app.layer_manager import LayerManagerWidget
 from app.models import DrawingDocument

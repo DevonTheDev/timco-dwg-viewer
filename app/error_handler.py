@@ -117,8 +117,8 @@ def _show_error_dialog(report: str, log_file: Path | None) -> None:
         None,
         f"{APP_NAME} — Unexpected Error",
         "An unexpected error occurred.\n\n"
-        "An error report has been sent to Rieley and he will review\n"
-        "it to see if fixes need to be made.\n\n"
+        "A crash report has been saved locally. Please send this\n"
+        "file to Rieley so he can investigate the issue.\n\n"
         "We apologise for the inconvenience. You can try reopening\n"
         f"the application.{log_note}",
     )

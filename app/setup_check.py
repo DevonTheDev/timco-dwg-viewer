@@ -7,8 +7,8 @@ import shutil
 import webbrowser
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QThread, Signal, QSize
-from PySide6.QtGui import QPixmap, QFont, QColor, QPalette, QIcon
+from PySide6.QtCore import Qt, QThread, Signal
+from PySide6.QtGui import QPixmap, QFont, QIcon
 from PySide6.QtWidgets import (
     QApplication,
     QDialog,
@@ -265,7 +265,7 @@ class SetupDialog(QDialog):
             "Download ODA",
             "Your browser has been opened to the ODA download page.\n\n"
             "1. Download and install ODA File Converter\n"
-            "2. Come back here and click 'Recheck' or 'Continue'\n\n"
+            "2. Come back here and click 'Continue'\n\n"
             "If it still isn't detected, use 'locate manually'.",
         )
         # Re-check in case they installed quickly

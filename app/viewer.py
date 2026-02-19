@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import Qt, Signal, QPointF
-from PySide6.QtGui import QColor, QMouseEvent, QWheelEvent, QAction
+from PySide6.QtCore import Qt, Signal, QPointF, QEvent
+from PySide6.QtGui import QColor, QMouseEvent, QWheelEvent
 from PySide6.QtWidgets import (
     QGraphicsScene,
     QGraphicsView,
@@ -130,6 +130,13 @@ class CADGraphicsView(QGraphicsView):
             event.accept()
         else:
             super().mouseReleaseEvent(event)
+
+    def focusOutEvent(self, event) -> None:
+        """Reset middle-drag state if the view loses focus (e.g. Alt+Tab)."""
+        if self._middle_dragging:
+            self._middle_dragging = False
+            self.setCursor(Qt.CursorShape.ArrowCursor)
+        super().focusOutEvent(event)
 
     # ── Wheel zoom ───────────────────────────────────────────
 
