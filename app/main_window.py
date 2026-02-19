@@ -159,10 +159,22 @@ class MainWindow(QMainWindow):
             QToolBar QToolButton:pressed {{
                 background: #E0A800;
             }}
+            QToolBar QToolButton:checked {{
+                background: {TIMCO_GREEN};
+                color: white;
+                border-color: white;
+            }}
             QToolBar QToolButton:disabled {{
                 background: #B0B0B0;
                 color: #707070;
                 border-color: #909090;
+            }}
+            QGraphicsView {{
+                selection-background-color: rgba(26, 122, 61, 120);
+            }}
+            QRubberBand {{
+                border: 2px solid {TIMCO_YELLOW};
+                background: rgba(255, 192, 0, 40);
             }}
             QStatusBar {{
                 background: {TIMCO_DARK_GREEN};
@@ -290,6 +302,12 @@ class MainWindow(QMainWindow):
         self._act_flip.setCheckable(True)
         self._act_flip.triggered.connect(self._flip)
         tb.addAction(self._act_flip)
+
+        self._act_select = QAction("Select", self)
+        self._act_select.setShortcut(QKeySequence("S"))
+        self._act_select.setCheckable(True)
+        self._act_select.triggered.connect(self._toggle_select_mode)
+        tb.addAction(self._act_select)
 
         tb.addSeparator()
 
@@ -474,6 +492,9 @@ class MainWindow(QMainWindow):
 
     def _flip(self) -> None:
         self._viewer.flip_vertical()
+
+    def _toggle_select_mode(self) -> None:
+        self._viewer.view.set_select_mode(self._act_select.isChecked())
 
     # ── Export ────────────────────────────────────────────────
 

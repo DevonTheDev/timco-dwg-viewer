@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Qt, Signal, QPointF, QEvent
-from PySide6.QtGui import QColor, QMouseEvent, QWheelEvent
+from PySide6.QtGui import QColor, QKeyEvent, QMouseEvent, QPainter, QWheelEvent
 from PySide6.QtWidgets import (
+    QGraphicsItem,
     QGraphicsScene,
     QGraphicsView,
     QMenu,
@@ -25,6 +26,12 @@ from app.config import BACKGROUND_COLOR, ZOOM_FACTOR
 # 300 steps at 1.15× per step ≈ 10^18× range — more than enough.
 MAX_ZOOM_STEPS = 300
 
+# Zoom step threshold above which antialiasing is disabled for performance.
+AA_DISABLE_THRESHOLD = 50
+
+# Padding factor for scene rect (fraction of drawing size added on each side).
+SCENE_PADDING_FACTOR = 0.5
+
 # Data key used on QGraphicsItems to store their source layer name
 LAYER_DATA_KEY = 0
 
@@ -40,6 +47,8 @@ class TaggingScene(QGraphicsScene):
         super().addItem(item)
         if self._current_layer is not None:
             item.setData(LAYER_DATA_KEY, self._current_layer)
+        item.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, True)
+        item.setCacheMode(QGraphicsItem.CacheMode.DeviceCoordinateCache)
 
 
 class TaggingFrontend(Frontend):
@@ -72,9 +81,32 @@ class CADGraphicsView(QGraphicsView):
         self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.setBackgroundBrush(QColor(BACKGROUND_COLOR))
+        self.setViewportUpdateMode(
+            QGraphicsView.ViewportUpdateMode.MinimalViewportUpdate
+        )
         self._middle_dragging = False
         self._middle_last_pos = QPointF()
         self._zoom_step = 0  # relative to fit level
+        self._aa_enabled = True  # tracks whether antialiasing is active
+
+    # ── Select mode ──────────────────────────────────────────
+
+    def set_select_mode(self, enabled: bool) -> None:
+        """Toggle between rubber-band selection and scroll-hand pan."""
+        if enabled:
+            self.setDragMode(QGraphicsView.DragMode.RubberBandDrag)
+        else:
+            self.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
+
+    def keyPressEvent(self, event: QKeyEvent) -> None:
+        if event.key() == Qt.Key.Key_Delete:
+            scene = self.scene()
+            if scene:
+                for item in scene.selectedItems():
+                    scene.removeItem(item)
+            event.accept()
+        else:
+            super().keyPressEvent(event)
 
     # ── Right-click context menu ─────────────────────────────
 
@@ -150,6 +182,7 @@ class CADGraphicsView(QGraphicsView):
             if self._zoom_step > -MAX_ZOOM_STEPS:
                 self.scale(1.0 / ZOOM_FACTOR, 1.0 / ZOOM_FACTOR)
                 self._zoom_step -= 1
+        self._update_aa()
 
     def do_zoom_in(self) -> None:
         """Single zoom-in step (for toolbar button)."""
@@ -163,6 +196,16 @@ class CADGraphicsView(QGraphicsView):
             self.scale(1.0 / ZOOM_FACTOR, 1.0 / ZOOM_FACTOR)
             self._zoom_step -= 1
 
+    # ── Antialiasing toggle ────────────────────────────────
+
+    def _update_aa(self) -> None:
+        """Disable antialiasing at high zoom for performance; re-enable when low."""
+        should_aa = self._zoom_step < AA_DISABLE_THRESHOLD
+        if should_aa != self._aa_enabled:
+            self._aa_enabled = should_aa
+            self.setRenderHint(QPainter.RenderHint.Antialiasing, should_aa)
+            self.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform, should_aa)
+
     # ── Fit ──────────────────────────────────────────────────
 
     def fit_drawing(self) -> None:
@@ -172,6 +215,7 @@ class CADGraphicsView(QGraphicsView):
             self.fitInView(scene.itemsBoundingRect(), Qt.AspectRatioMode.KeepAspectRatio)
             self.scale(1, -1)  # DXF Y-up → screen Y-down
             self._zoom_step = 0
+            self._update_aa()
 
 
 class DXFViewerWidget(QWidget):
@@ -231,6 +275,7 @@ class DXFViewerWidget(QWidget):
         ctx = RenderContext(self._doc)
 
         new_scene = TaggingScene()
+        new_scene.setItemIndexMethod(QGraphicsScene.ItemIndexMethod.NoIndex)
         backend = PyQtBackend(new_scene)
 
         config = Configuration(
@@ -264,9 +309,23 @@ class DXFViewerWidget(QWidget):
         if old_scene and old_scene is not new_scene:
             old_scene.deleteLater()
 
+        # Expand the scene rect so users can pan past drawing edges.
+        self._apply_scene_padding(new_scene)
+
         self.render_finished.emit()
 
+    @staticmethod
+    def _apply_scene_padding(scene: TaggingScene) -> None:
+        """Expand the scene rect so users can pan past drawing edges."""
+        items_rect = scene.itemsBoundingRect()
+        if items_rect.isEmpty():
+            return
+        pad_w = items_rect.width() * SCENE_PADDING_FACTOR
+        pad_h = items_rect.height() * SCENE_PADDING_FACTOR
+        scene.setSceneRect(items_rect.adjusted(-pad_w, -pad_h, pad_w, pad_h))
+
     def fit_drawing(self) -> None:
+        self._apply_scene_padding(self._scene)
         self._view.fit_drawing()
         # Re-apply the user's manual flip on top of the default correction
         if self._flipped:
