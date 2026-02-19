@@ -366,6 +366,10 @@ class MainWindow(QMainWindow):
 
     def _open_path(self, file_path: Path) -> None:
         """Open a DWG or DXF file by path (used by dialog, recent menu, and drag-drop)."""
+        # Block opening another file while a conversion is in progress
+        if self._conversion_thread and self._conversion_thread.isRunning():
+            return
+
         if not file_path.is_file():
             QMessageBox.warning(self, "File Not Found", f"File no longer exists:\n{file_path}")
             return

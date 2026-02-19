@@ -79,7 +79,6 @@ class CADGraphicsView(QGraphicsView):
     # ── Right-click context menu ─────────────────────────────
 
     def contextMenuEvent(self, event) -> None:
-        scene_pos = self.mapToScene(event.pos())
         item = self.itemAt(event.pos())
         if item is None:
             return

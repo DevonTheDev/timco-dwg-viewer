@@ -207,6 +207,10 @@ class LayerManagerWidget(QWidget):
         if not ok or not name.strip():
             return
         name = name.strip()
+        # Sanitize: remove characters that are invalid in Windows filenames
+        name = "".join(c for c in name if c not in r'\/:*?"<>|')
+        if not name:
+            return
         preset = LayerPreset(
             name=name,
             visible_layers=self._get_visible_layers(),

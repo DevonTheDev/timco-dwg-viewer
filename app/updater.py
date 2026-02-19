@@ -132,7 +132,7 @@ class _DownloadWorker(QObject):
                             break
                         f.write(chunk)
                         downloaded += len(chunk)
-                        if total:
+                        if total and int(total) > 0:
                             pct = int(downloaded / int(total) * 100)
                             self.progress.emit(f"Downloading... {pct}%")
 
