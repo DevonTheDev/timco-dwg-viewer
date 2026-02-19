@@ -1,14 +1,12 @@
-"""Global error handling with email reporting to Rieley."""
+"""Global error handling with local crash logging."""
 
 from __future__ import annotations
 
 import logging
 import platform
-import smtplib
 import sys
 import traceback
 from datetime import datetime, timezone
-from email.mime.text import MIMEText
 from pathlib import Path
 
 from PySide6.QtWidgets import QApplication, QMessageBox
@@ -17,7 +15,6 @@ from app.config import APP_NAME, APP_VERSION
 
 logger = logging.getLogger(__name__)
 
-REPORT_EMAIL = "rieley.west@gmail.com"
 LOG_DIR = Path.home() / ".timco-dwg-viewer" / "logs"
 
 
@@ -77,30 +74,6 @@ def _save_crash_log(report: str) -> Path | None:
         return None
 
 
-def _send_email_report(report: str) -> bool:
-    """Attempt to send the error report via email.
-
-    Uses Gmail SMTP. Falls back gracefully if sending fails
-    (no credentials, no network, etc.) — the local log is the safety net.
-    """
-    try:
-        msg = MIMEText(report, "plain", "utf-8")
-        msg["Subject"] = f"[Timco DWG Viewer] Crash Report — {datetime.now().strftime('%Y-%m-%d %H:%M')}"
-        msg["From"] = "timco.dwg.errors@gmail.com"
-        msg["To"] = REPORT_EMAIL
-
-        # Try sending via localhost SMTP relay first (common in enterprise)
-        with smtplib.SMTP("localhost", 25, timeout=5) as server:
-            server.send_message(msg)
-        return True
-    except Exception:
-        pass
-
-    # If no local SMTP, log it — the crash log file is the fallback
-    logger.debug("Email send failed — crash log saved locally instead")
-    return False
-
-
 def _show_error_dialog(report: str, log_file: Path | None) -> None:
     """Show a user-friendly error popup."""
     app = QApplication.instance()
@@ -117,8 +90,7 @@ def _show_error_dialog(report: str, log_file: Path | None) -> None:
         None,
         f"{APP_NAME} — Unexpected Error",
         "An unexpected error occurred.\n\n"
-        "A crash report has been saved locally. Please send this\n"
-        "file to Rieley so he can investigate the issue.\n\n"
+        "An error report has been saved locally.\n\n"
         "We apologise for the inconvenience. You can try reopening\n"
         f"the application.{log_note}",
     )
@@ -136,9 +108,6 @@ def global_exception_handler(exc_type, exc_value, exc_tb) -> None:
     # Log to stderr and file
     logger.critical("Unhandled exception:\n%s", report)
     log_file = _save_crash_log(report)
-
-    # Try to email
-    _send_email_report(report)
 
     # Show dialog
     try:
