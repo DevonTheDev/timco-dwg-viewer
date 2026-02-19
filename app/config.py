@@ -5,7 +5,7 @@ from pathlib import Path
 
 APP_NAME = "Timco DWG Viewer"
 APP_ORG = "Timco"
-APP_VERSION = "1.0.4"
+APP_VERSION = "1.0.5"
 
 # GitHub releases repo (public — used for auto-updates)
 GITHUB_RELEASES_REPO = "DevonTheDev/timco-dwg-releases"
