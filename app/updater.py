@@ -413,6 +413,12 @@ class UpdateProgressDialog(QDialog):
     def _on_finished(self, success: bool, result: str) -> None:
         if success:
             self._status_label.setText("Restarting...")
+
+            # Stop the thread first so closeEvent won't block the quit
+            if self._thread:
+                self._thread.quit()
+                self._thread.wait()
+
             # Launch the updater batch script and quit
             subprocess.Popen(
                 ["cmd", "/c", result],
