@@ -544,29 +544,23 @@ class MainWindow(QMainWindow):
             self,
             "Update Available",
             f"Download and install v{self._pending_update.version}?\n\n"
-            "The application will restart automatically.",
+            "The application will close and restart automatically.",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         )
         if reply != QMessageBox.StandardButton.Yes:
             return
 
-        self._status_bar.showMessage("Downloading update...")
-        self._progress.setVisible(True)
-        self._progress.setRange(0, 0)
-        QApplication.processEvents()
+        from app.updater import UpdateProgressDialog
 
-        from app.updater import apply_update
+        # Close the main window, then show a small progress dialog
+        self.hide()
 
-        if apply_update(self._pending_update):
-            QApplication.quit()
-        else:
-            self._progress.setVisible(False)
-            QMessageBox.warning(
-                self, "Update Failed",
-                "Could not apply the update. Please try again later\n"
-                "or download the latest version manually.",
-            )
-            self._status_bar.showMessage("Update failed.", 5000)
+        dialog = UpdateProgressDialog(self._pending_update)
+        dialog.start()
+        dialog.exec()
+
+        # If we get here, the update failed and the dialog was dismissed
+        self.show()
 
     def _show_about(self) -> None:
         QMessageBox.about(
