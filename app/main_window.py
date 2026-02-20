@@ -169,13 +169,6 @@ class MainWindow(QMainWindow):
                 color: #707070;
                 border-color: #909090;
             }}
-            QGraphicsView {{
-                selection-background-color: rgba(26, 122, 61, 120);
-            }}
-            QRubberBand {{
-                border: 2px solid {TIMCO_YELLOW};
-                background: rgba(255, 192, 0, 40);
-            }}
             QStatusBar {{
                 background: {TIMCO_DARK_GREEN};
                 color: white;

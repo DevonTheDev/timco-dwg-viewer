@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import Qt, Signal, QPointF, QEvent
-from PySide6.QtGui import QColor, QKeyEvent, QMouseEvent, QPainter, QWheelEvent
+from PySide6.QtCore import Qt, Signal, QPointF, QRectF
+from PySide6.QtGui import QColor, QKeyEvent, QMouseEvent, QPainter, QPen, QWheelEvent
 from PySide6.QtWidgets import (
     QGraphicsItem,
+    QGraphicsRectItem,
     QGraphicsScene,
     QGraphicsView,
     QMenu,
@@ -34,6 +35,12 @@ SCENE_PADDING_FACTOR = 0.5
 
 # Data key used on QGraphicsItems to store their source layer name
 LAYER_DATA_KEY = 0
+# Data key used to mark items as highlighted by box-select
+_HIGHLIGHT_KEY = 1
+
+# Selection box colours (Timco yellow)
+_SELECT_BOX_BORDER = "#FFC000"
+_SELECT_BOX_FILL = "#28FFC000"  # ~15% opacity yellow
 
 
 class TaggingScene(QGraphicsScene):
@@ -48,6 +55,15 @@ class TaggingScene(QGraphicsScene):
         if self._current_layer is not None:
             item.setData(LAYER_DATA_KEY, self._current_layer)
         item.setCacheMode(QGraphicsItem.CacheMode.DeviceCoordinateCache)
+
+    def drawForeground(self, painter: QPainter, rect: QRectF) -> None:
+        """Draw highlight rectangles over box-selected items."""
+        super().drawForeground(painter, rect)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor(255, 192, 0, 60))
+        for item in self.items():
+            if item.data(_HIGHLIGHT_KEY):
+                painter.drawRect(item.sceneBoundingRect())
 
 
 class TaggingFrontend(Frontend):
@@ -89,36 +105,74 @@ class CADGraphicsView(QGraphicsView):
         self._aa_enabled = True  # tracks whether antialiasing is active
         self._select_mode = False
 
+        # Box-select state
+        self._box_origin: QPointF | None = None  # scene coords of drag start
+        self._box_rect_item: QGraphicsRectItem | None = None  # visual overlay
+        self._selected_items: list[QGraphicsItem] = []
+
     # ── Select mode ──────────────────────────────────────────
 
     def set_select_mode(self, enabled: bool) -> None:
-        """Toggle between rubber-band selection and scroll-hand pan."""
+        """Toggle between box selection and scroll-hand pan."""
         self._select_mode = enabled
         if enabled:
-            self.setDragMode(QGraphicsView.DragMode.RubberBandDrag)
+            self.setDragMode(QGraphicsView.DragMode.NoDrag)
+            self.setCursor(Qt.CursorShape.CrossCursor)
         else:
+            self._clear_selection()
             self.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
-        self._set_items_selectable(enabled)
 
-    def _set_items_selectable(self, selectable: bool) -> None:
-        """Enable or disable the ItemIsSelectable flag on all scene items."""
+    def _clear_selection(self) -> None:
+        """Remove highlight from all selected items and clear the list."""
+        for item in self._selected_items:
+            if item.scene():  # still in the scene
+                item.setData(_HIGHLIGHT_KEY, None)
+                item.update()
+        self._selected_items.clear()
+        self._remove_box_rect()
+
+    def _remove_box_rect(self) -> None:
+        """Remove the visual selection rectangle from the scene."""
+        if self._box_rect_item and self._box_rect_item.scene():
+            self._box_rect_item.scene().removeItem(self._box_rect_item)
+        self._box_rect_item = None
+
+    def _finish_box_select(self, rect: QRectF) -> None:
+        """Select all items whose bounding rect intersects the selection box."""
         scene = self.scene()
         if not scene:
             return
-        if not selectable:
-            scene.clearSelection()
-        for item in scene.items():
-            item.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, selectable)
+
+        # Clear previous selection
+        for item in self._selected_items:
+            if item.scene():
+                item.setData(_HIGHLIGHT_KEY, None)
+                item.update()
+        self._selected_items.clear()
+
+        # Find items by bounding-rect intersection (CAD-style)
+        hits = scene.items(rect, Qt.ItemSelectionMode.IntersectsItemBoundingRect)
+        for item in hits:
+            # Skip the selection box overlay itself
+            if item is self._box_rect_item:
+                continue
+            item.setData(_HIGHLIGHT_KEY, True)
+            item.update()
+            self._selected_items.append(item)
 
     def keyPressEvent(self, event: QKeyEvent) -> None:
-        if event.key() == Qt.Key.Key_Delete:
-            scene = self.scene()
-            if scene:
-                for item in scene.selectedItems():
-                    scene.removeItem(item)
-            event.accept()
-        else:
-            super().keyPressEvent(event)
+        if event.key() in (Qt.Key.Key_Delete, Qt.Key.Key_Backspace):
+            if self._selected_items:
+                scene = self.scene()
+                if scene:
+                    for item in self._selected_items:
+                        if item.scene():
+                            scene.removeItem(item)
+                self._selected_items.clear()
+                self._remove_box_rect()
+                event.accept()
+                return
+        super().keyPressEvent(event)
 
     # ── Right-click context menu ─────────────────────────────
 
@@ -142,13 +196,17 @@ class CADGraphicsView(QGraphicsView):
         if chosen == hide_action:
             self.hide_layer_requested.emit(layer)
 
-    # ── Middle-mouse-button pan ──────────────────────────────
+    # ── Mouse handling (box-select + middle-pan) ────────────
 
     def mousePressEvent(self, event: QMouseEvent) -> None:
         if event.button() == Qt.MouseButton.MiddleButton:
             self._middle_dragging = True
             self._middle_last_pos = event.position()
             self.setCursor(Qt.CursorShape.ClosedHandCursor)
+            event.accept()
+        elif event.button() == Qt.MouseButton.LeftButton and self._select_mode:
+            self._box_origin = self.mapToScene(event.position().toPoint())
+            self._remove_box_rect()
             event.accept()
         else:
             super().mousePressEvent(event)
@@ -164,13 +222,39 @@ class CADGraphicsView(QGraphicsView):
                 self.verticalScrollBar().value() - int(delta.y())
             )
             event.accept()
+        elif self._box_origin is not None:
+            current = self.mapToScene(event.position().toPoint())
+            rect = QRectF(self._box_origin, current).normalized()
+            scene = self.scene()
+            if scene:
+                if self._box_rect_item is None:
+                    self._box_rect_item = QGraphicsRectItem()
+                    pen = QPen(QColor(_SELECT_BOX_BORDER), 0)
+                    pen.setCosmetic(True)
+                    pen.setWidth(2)
+                    self._box_rect_item.setPen(pen)
+                    self._box_rect_item.setBrush(QColor(_SELECT_BOX_FILL))
+                    self._box_rect_item.setZValue(1e9)
+                    scene.addItem(self._box_rect_item)
+                self._box_rect_item.setRect(rect)
+            event.accept()
         else:
             super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:
         if event.button() == Qt.MouseButton.MiddleButton:
             self._middle_dragging = False
-            self.setCursor(Qt.CursorShape.ArrowCursor)
+            if self._select_mode:
+                self.setCursor(Qt.CursorShape.CrossCursor)
+            else:
+                self.setCursor(Qt.CursorShape.ArrowCursor)
+            event.accept()
+        elif event.button() == Qt.MouseButton.LeftButton and self._box_origin is not None:
+            current = self.mapToScene(event.position().toPoint())
+            rect = QRectF(self._box_origin, current).normalized()
+            self._box_origin = None
+            if rect.width() > 0 and rect.height() > 0:
+                self._finish_box_select(rect)
             event.accept()
         else:
             super().mouseReleaseEvent(event)
@@ -324,9 +408,9 @@ class DXFViewerWidget(QWidget):
         # Expand the scene rect so users can pan past drawing edges.
         self._apply_scene_padding(new_scene)
 
-        # Re-apply select mode to the new scene's items.
-        if self._view._select_mode:
-            self._view._set_items_selectable(True)
+        # Clear any dangling selection references from the old scene.
+        self._view._selected_items.clear()
+        self._view._box_rect_item = None
 
         self.render_finished.emit()
 
