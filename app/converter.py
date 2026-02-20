@@ -133,6 +133,8 @@ def start_conversion(dwg_path: Path, on_finished, on_error) -> tuple[QThread, Co
     thread.started.connect(worker.run)
     worker.finished.connect(thread.quit)
     worker.error.connect(thread.quit)
+    thread.finished.connect(worker.deleteLater)
+    thread.finished.connect(thread.deleteLater)
     worker.finished.connect(on_finished)
     worker.error.connect(on_error)
 

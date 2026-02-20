@@ -47,7 +47,6 @@ class TaggingScene(QGraphicsScene):
         super().addItem(item)
         if self._current_layer is not None:
             item.setData(LAYER_DATA_KEY, self._current_layer)
-        item.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, True)
         item.setCacheMode(QGraphicsItem.CacheMode.DeviceCoordinateCache)
 
 
@@ -82,21 +81,34 @@ class CADGraphicsView(QGraphicsView):
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.setBackgroundBrush(QColor(BACKGROUND_COLOR))
         self.setViewportUpdateMode(
-            QGraphicsView.ViewportUpdateMode.MinimalViewportUpdate
+            QGraphicsView.ViewportUpdateMode.FullViewportUpdate
         )
         self._middle_dragging = False
         self._middle_last_pos = QPointF()
         self._zoom_step = 0  # relative to fit level
         self._aa_enabled = True  # tracks whether antialiasing is active
+        self._select_mode = False
 
     # ── Select mode ──────────────────────────────────────────
 
     def set_select_mode(self, enabled: bool) -> None:
         """Toggle between rubber-band selection and scroll-hand pan."""
+        self._select_mode = enabled
         if enabled:
             self.setDragMode(QGraphicsView.DragMode.RubberBandDrag)
         else:
             self.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
+        self._set_items_selectable(enabled)
+
+    def _set_items_selectable(self, selectable: bool) -> None:
+        """Enable or disable the ItemIsSelectable flag on all scene items."""
+        scene = self.scene()
+        if not scene:
+            return
+        if not selectable:
+            scene.clearSelection()
+        for item in scene.items():
+            item.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, selectable)
 
     def keyPressEvent(self, event: QKeyEvent) -> None:
         if event.key() == Qt.Key.Key_Delete:
@@ -311,6 +323,10 @@ class DXFViewerWidget(QWidget):
 
         # Expand the scene rect so users can pan past drawing edges.
         self._apply_scene_padding(new_scene)
+
+        # Re-apply select mode to the new scene's items.
+        if self._view._select_mode:
+            self._view._set_items_selectable(True)
 
         self.render_finished.emit()
 

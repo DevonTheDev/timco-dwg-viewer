@@ -449,6 +449,7 @@ class MainWindow(QMainWindow):
             self._dxf_path = path
             self._original_path = display_path or path
         except Exception as e:
+            self._dxf_temp_dir = old_temp  # restore so it's cleaned up next time
             self._set_loading(False)
             self._loading = False
             QMessageBox.critical(self, "Load Error", f"Failed to load DXF:\n{e}")
@@ -550,6 +551,8 @@ class MainWindow(QMainWindow):
         self._update_thread.started.connect(self._update_worker.run)
         self._update_worker.finished.connect(self._on_update_check_done)
         self._update_worker.finished.connect(self._update_thread.quit)
+        self._update_thread.finished.connect(self._update_worker.deleteLater)
+        self._update_thread.finished.connect(self._update_thread.deleteLater)
         self._update_thread.start()
 
     def _on_update_check_done(self, info) -> None:
