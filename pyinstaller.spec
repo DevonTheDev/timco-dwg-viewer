@@ -104,6 +104,12 @@ coll = COLLECT(
     a.datas,
     strip=False,
     upx=True,
-    upx_exclude=[],
+    upx_exclude=[
+        # UPX corrupts these DLLs, causing "Failed to load Python DLL" on
+        # machines without the VC++ redistributable installed.
+        "python313.dll",
+        "vcruntime140.dll",
+        "vcruntime140_1.dll",
+    ],
     name="TimcoDWG",
 )
